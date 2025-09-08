@@ -2,6 +2,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
 
+// ✅ Make sure this runs on Node (required for livekit-server-sdk)
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 function need(name: string) {
   const v = process.env[name];
   if (!v) throw new Error(`${name} is not set`);
@@ -22,8 +26,7 @@ export async function POST(req: NextRequest) {
     }
 
     // password check
-    const expected =
-      ROLE === "OMAR" ? need("OMAR_PASSWORD") : need("DASHA_PASSWORD");
+    const expected = ROLE === "OMAR" ? need("OMAR_PASSWORD") : need("DASHA_PASSWORD");
     if (password !== expected) {
       return NextResponse.json({ error: "invalid password" }, { status: 401 });
     }
@@ -33,11 +36,10 @@ export async function POST(req: NextRequest) {
     const apiKey = need("LIVEKIT_API_KEY");
     const apiSecret = need("LIVEKIT_API_SECRET");
 
-    // RoomServiceClient host must be HTTPS base (not wss). Convert.
+    // RoomServiceClient must use HTTPS base (convert from wss)
     const host = url.replace(/^wss:/, "https:").replace(/^ws:/, "http:");
     const svc = new RoomServiceClient(host, apiKey, apiSecret);
 
-    // If room exists and participant with same identity already there → block
     try {
       const participants = await svc.listParticipants(room);
       const taken = participants.some((p) => p.identity === ROLE);
@@ -48,10 +50,10 @@ export async function POST(req: NextRequest) {
         );
       }
     } catch {
-      // listParticipants may throw if room doesn't exist yet; that’s fine (room will be created on join)
+      // room may not exist yet; that's fine
     }
 
-    // Issue token using identity = ROLE (enforces uniqueness at LiveKit level too)
+    // mint token with identity = ROLE
     const at = new AccessToken(apiKey, apiSecret, {
       identity: ROLE,
       name: ROLE,
@@ -63,7 +65,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       token,
-      wsUrl: url,
+      wsUrl: url, // client should connect to wss url
       identity: ROLE,
     });
   } catch (e: any) {
