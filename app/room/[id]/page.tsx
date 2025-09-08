@@ -10,7 +10,6 @@ import {
   TrackPublication,
   LocalParticipant,
   RemoteParticipant,
-  DataPacket_Kind,
 } from "livekit-client";
 
 type ChatMessage = { me: boolean; original: string; translated: string };
@@ -123,20 +122,27 @@ export default function RoomPage() {
       }
     });
 
-    r.on(RoomEvent.DataReceived, (payload) => {
-      try {
-        const msg = JSON.parse(new TextDecoder().decode(payload));
-        if (msg?.type === "chat") {
-          setMessages((m) => [
-            ...m,
-            { me: false, original: msg.original, translated: msg.translated },
-          ]);
-        }
-      } catch {}
-    });
+    // Updated signature: payload, participant?, kind?, topic?
+    r.on(
+      RoomEvent.DataReceived,
+      (payload: Uint8Array, _p?: LocalParticipant | RemoteParticipant, _k?: any, topic?: string) => {
+        if (topic && topic !== "chat") return;
+        try {
+          const msg = JSON.parse(new TextDecoder().decode(payload));
+          if (msg?.type === "chat") {
+            setMessages((m) => [
+              ...m,
+              { me: false, original: msg.original, translated: msg.translated },
+            ]);
+          }
+        } catch {}
+      }
+    );
 
     setRoom(r);
-    return () => r.disconnect();
+    return () => {
+      void r.disconnect(); // cleanup must not return a Promise
+    };
   }, []);
 
   async function joinRoom() {
@@ -202,7 +208,8 @@ export default function RoomPage() {
       const payload = new TextEncoder().encode(
         JSON.stringify({ type: "chat", original: text, translated: data.translated })
       );
-      await room.localParticipant.publishData(payload, DataPacket_Kind.RELIABLE);
+      // v2 API: use options object (reliable + topic)
+      await room.localParticipant.publishData(payload, { reliable: true, topic: "chat" });
     } catch {}
 
     setInput("");
