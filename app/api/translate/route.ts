@@ -1,6 +1,10 @@
 // app/api/translate/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
+
+export const dynamic = "force-dynamic";
+
+
 export const runtime = "nodejs"; // ensure Node runtime for DeepL REST
 
 function need(name: string): string {
